@@ -28,9 +28,7 @@ class Peer():
 			message, address = server_socket.recvfrom(1024)
 			message_text = message.decode()
 
-			print(message_text)
-
-			print("A ping request message was received from Peer %s" % message_text[5:])
+			print("A ping request message was received from Peer %s." % message_text[5:])
 
 			if message_text[4] == '1':
 				self.predecessor = int(message_text[5:])
@@ -48,7 +46,54 @@ class Peer():
 
 
 	def pingSuccessors(self):
+		first_drop_count = 0
+		second_drop_count = 0 
+
 		while True:
+
+			if first_drop_count > 5:
+				print("Peer %d no longer alive." % self.next_id)
+
+				sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+				departure_message_text = "K1"
+				departure_message = departure_message_text.encode()
+				sock.connect((self.host, 50000 + self.next_next_id))
+				sock.send(departure_message)
+				response = sock.recv(1024)
+				sock.close()
+
+				response_text = response.decode()
+
+				self.next_id = self.next_next_id
+				self.next_next_id = int(response_text) 
+
+				print("My first successor is now peer %d." % self.next_id)
+				print("My second successor is now peer %d." % self.next_next_id)
+
+				first_drop_count = 0
+
+
+			if second_drop_count > 6: 
+				print("Peer %d no longer alive." % self.next_next_id)
+
+				sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+				departure_message_text = "K2"
+				departure_message = departure_message_text.encode()
+				sock.connect((self.host, 50000 + self.next_id))
+				sock.send(departure_message)
+				response = sock.recv(1024)
+				sock.close()
+
+				response_text = response.decode()
+
+				self.next_next_id = int(response_text)
+
+				print("My first successor is now peer %d." % self.next_id)
+				print("My second successor is now peer %d." % self.next_next_id)
+
+				second_drop_count = 0
+
+
 			time.sleep(5)
 			client_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
@@ -58,7 +103,6 @@ class Peer():
 			client_socket.settimeout(1.0)
 			message_string = 'PING1' + str(self.id)
 			message = message_string.encode()
-			print()
 
 			addr = (self.host, 50000 + self.next_id)
 
@@ -67,10 +111,12 @@ class Peer():
 			try:
 				data, server = client_socket.recvfrom(1024)
 				response = data.decode()
-				print("A ping response message was received from Peer %s" % response[4:])
+				print("A ping response message was received from Peer %s." % response[4:])
+				first_drop_count = 0
 
 			except socket.timeout:
 				print('PING TO PEER %d TIMED OUT' % self.next_id)
+				first_drop_count += 1
 
 			########## Ping second successor ##########		
 			
@@ -85,10 +131,12 @@ class Peer():
 			try:
 				data, server = client_socket.recvfrom(1024)
 				response = data.decode()
-				print("A ping response message was received from Peer %s" % response[4:])
+				print("A ping response message was received from Peer %s." % response[4:])
+				second_drop_count = 0
 
 			except socket.timeout:
 				print('PING TO PEER %d TIMED OUT' % self.next_next_id)
+				second_drop_count += 1
 
 
 	def departureServerInit(self):
@@ -102,28 +150,34 @@ class Peer():
 			message = conn.recv(1024)
 			message_text = message.decode()
 
-			split1 = message_text.find("|")
-			split2 = message_text.find("|", split1 + 1)
-			split3 = message_text.find("|", split2 + 1)
+			if message_text[0] == "K":
+				response_text = str(self.next_id)
+				message = response_text.encode()
 
-			print("Peer %s will depart from the network" % message_text[split1+1:split2])
 
-			if message_text[:split1] == "1":
-				print("My first successor is now peer %s" % message_text[split2+1:split3])
-				self.next_id = int(message_text[split2+1:split3])
+			else: 
+				split1 = message_text.find("|")
+				split2 = message_text.find("|", split1 + 1)
+				split3 = message_text.find("|", split2 + 1)
 
-				print("My second successor is now peer %s" % message_text[split3+1:])
-				self.next_next_id = int(message_text[split3+1:])
+				print("Peer %s will depart from the network." % message_text[split1+1:split2])
 
-			elif message_text[:split1] == "2": 
-				print("My first successor is now peer %d" % self.next_id)
+				if message_text[:split1] == "1":
+					print("My first successor is now peer %s." % message_text[split2+1:split3])
+					self.next_id = int(message_text[split2+1:split3])
 
-				print("My second successor is now peer %s" % message_text[split2+1:split3])
-				self.next_next_id = int(message_text[split2+1:split3])
+					print("My second successor is now peer %s." % message_text[split3+1:])
+					self.next_next_id = int(message_text[split3+1:])
 
-			else:
-				print("ERROR: INCORRECT PROTOCOL")
-				continue 
+				elif message_text[:split1] == "2": 
+					print("My first successor is now peer %d." % self.next_id)
+
+					print("My second successor is now peer %s." % message_text[split2+1:split3])
+					self.next_next_id = int(message_text[split2+1:split3])
+
+				else:
+					print("ERROR: INCORRECT PROTOCOL")
+					continue 
 
 
 			conn.send(message)
