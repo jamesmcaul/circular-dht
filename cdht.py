@@ -139,7 +139,7 @@ class Peer():
 				second_drop_count += 1
 
 
-	def departureServerInit(self):
+	def tcpServerInit(self):
 		while True: 
 			server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 			server_socket.bind((self.host, 50000 + self.id))
@@ -153,6 +153,36 @@ class Peer():
 			if message_text[0] == "K":
 				response_text = str(self.next_id)
 				message = response_text.encode()
+
+			elif message_text[:3] == "REQ":
+				file = int(message_text[3:7])
+				file_hash = file % 256
+
+				if file_hash == self.id or (file_hash < self.id and file_hash > self.predecessor) or (file_hash < self.id and self.id < self.predecessor) or (file_hash > self.id and file_hash > self.predecessor and self.id < self.predecessor):
+					print("File %d is here." % file)
+					response_text = "RES" + str(file) + "|" + str(self.id)
+					response = response_text.encode()
+
+					respond_to_peer = int(message_text[8:])
+
+					sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+					sock.connect((self.host, 50000 + respond_to_peer))
+					sock.send(response)
+					sock.close()
+					print("A response message, destined for peer %d, has been sent." % respond_to_peer)
+
+
+				else:
+					print("File %d is not stored here." % file)
+					sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+					sock.connect((self.host, 50000 + self.next_id))
+					sock.send(message)
+					sock.close()
+					print("File request message has been forwarded to my successor.")
+
+
+			elif message_text[:3] == "RES":
+				print("Received a response message from peer %s, which has the file %s." % (message_text[8:], message_text[3:7]))
 
 
 			else: 
@@ -215,14 +245,14 @@ def main():
 	pingServerThread = threading.Thread(target=peer.pingServerInit)
 	pingServerThread.daemon = True
 
-	departureServerThread = threading.Thread(target=peer.departureServerInit)
-	departureServerThread.daemon = True
+	tcpServerThread = threading.Thread(target=peer.tcpServerInit)
+	tcpServerThread.daemon = True
 
 	pingSuccessorsThread = threading.Thread(target=peer.pingSuccessors)
 	pingSuccessorsThread.daemon = True
 
 	pingServerThread.start() 
-	departureServerThread.start()
+	tcpServerThread.start()
 	pingSuccessorsThread.start()
 
 
@@ -259,6 +289,18 @@ def main():
 
 		elif text[:7] == "request":
 			print("Perform file transfer")
+
+			file = text[8:]
+
+			sock3 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+			departure_message_text = "REQ" + file + "|" + peer.id
+			departure_message = departure_message_text.encode()
+			sock3.connect((peer.host, 50000 + peer.next_id))
+			sock3.send(departure_message)
+			sock3.close()
+
+			print("File request message for %s has been sent to my successor." % file)
+
 
 		else:
 			print("ERROR: NOT A VALID INPUT")
