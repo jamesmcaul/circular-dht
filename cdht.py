@@ -15,21 +15,35 @@ class Peer():
 		self.next_next_id = next_next_id
 		self.mss = mss
 		self.drop_prob = drop_prob
+		self.predecessor = -1
+		self.prepredecessor = -1
 
 
 	def pingServerInit(self):
 
 		server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-		server_socket.bind((self.host, 5000 + self.id))
+		server_socket.bind((self.host, 50000 + self.id))
 
 		while True:
 			message, address = server_socket.recvfrom(1024)
 			message_text = message.decode()
 
-			print("A ping request message was received from Peer %s" % message_text[4:])
+			print(message_text)
 
-			response = "PING" + str(self.id)
-			response.encode()
+			print("A ping request message was received from Peer %s" % message_text[5:])
+
+			if message_text[4] == '1':
+				self.predecessor = int(message_text[5:])
+
+			elif message_text[4] == '2':
+				self.prepredecessor = int(message_text[5:])
+
+			else: 
+				print("PROTOCOL ERROR") 
+
+
+			response_string = "PING" + str(self.id)
+			response = response_string.encode()
 			server_socket.sendto(response, address)
 
 
@@ -42,10 +56,11 @@ class Peer():
 
 			# client_socket.bind((self.host, 6000 + self.id))
 			client_socket.settimeout(1.0)
-			message_string = 'PING' + str(self.id)
+			message_string = 'PING1' + str(self.id)
 			message = message_string.encode()
+			print()
 
-			addr = (self.host, 5000 + self.next_id)
+			addr = (self.host, 50000 + self.next_id)
 
 			client_socket.sendto(message, addr)
 
@@ -61,10 +76,10 @@ class Peer():
 			
 			# client_socket.bind((self.host, 7000 + self.id))
 			client_socket.settimeout(1.0)
-			message_string = 'PING' + str(self.id)
+			message_string = 'PING2' + str(self.id)
 			message = message_string.encode()
 
-			addr = (self.host, 5000 + self.next_next_id)
+			addr = (self.host, 50000 + self.next_next_id)
 
 			client_socket.sendto(message, addr)
 			try:
@@ -74,6 +89,21 @@ class Peer():
 
 			except socket.timeout:
 				print('PING TO PEER %d TIMED OUT' % self.next_next_id)
+
+
+	def departureServerInit(self):
+		while True: 
+			server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+			server_socket.bind((self.host, 50000 + self.id))
+			server_socket.listen(1)
+
+			conn, address = server_socket.accept()
+
+			message = conn.recv(1024)
+			message_text = message.decode()
+			print(message_text)
+			conn.send(message)
+			conn.close()
  
 
 
@@ -107,10 +137,59 @@ def main():
 	pingServerThread = threading.Thread(target=peer.pingServerInit)
 	pingServerThread.daemon = True
 
+	departureServerThread = threading.Thread(target=peer.departureServerInit)
+	departureServerThread.daemon = True
+
 	pingSuccessorsThread = threading.Thread(target=peer.pingSuccessors)
+	pingSuccessorsThread.daemon = True
 
 	pingServerThread.start() 
+	departureServerThread.start()
 	pingSuccessorsThread.start()
+
+
+	while True: 
+		text = input("-->")
+		
+		if text == "quit":
+			print("Perform peer departure")
+
+			if peer.predecessor == -1 or peer.prepredecessor == -1:
+				print("ERROR: PEER CANNOT SAFETLY EXIT, TRY AGAIN LATER") 
+				continue 
+
+
+
+			###### Depart from first predecessor #####
+			sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+			departure_message_text = "1|" + str(peer.id) + "|" + str(peer.next_id) + "|" + str(peer.next_next_id)
+			departure_message = departure_message_text.encode()
+			sock.connect((peer.host, 50000 + peer.predecessor))
+			sock.send(departure_message)
+			response = sock.recv(1024)
+			sock.close()
+
+			###### Depart from second predecessor #####
+			sock2 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+			departure_message_text = "2|" + str(peer.id) + "|" + str(peer.next_id) + "|" + str(peer.next_next_id)
+			departure_message = departure_message_text.encode()
+			sock2.connect((peer.host, 50000 + peer.prepredecessor))
+			sock2.send(departure_message)
+			response = sock2.recv(1024)
+			sock2.close()
+
+			break
+
+
+		elif text[:7] == "request":
+			print("Perform file transfer")
+
+		else:
+			print("ERROR: NOT A VALID INPUT")
+
+
+
+
 
 	print("Main function ending")
 	sys.exit()
