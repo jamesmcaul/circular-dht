@@ -48,7 +48,7 @@ class Peer():
 
 
 	def pingSuccessors(self):
-		for pings in range(10):
+		while True:
 			time.sleep(5)
 			client_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
@@ -101,7 +101,31 @@ class Peer():
 
 			message = conn.recv(1024)
 			message_text = message.decode()
-			print(message_text)
+
+			split1 = message_text.find("|")
+			split2 = message_text.find("|", split1 + 1)
+			split3 = message_text.find("|", split2 + 1)
+
+			print("Peer %s will depart from the network" % message_text[split1+1:split2])
+
+			if message_text[:split1] == "1":
+				print("My first successor is now peer %s" % message_text[split2+1:split3])
+				self.next_id = int(message_text[split2+1:split3])
+
+				print("My second successor is now peer %s" % message_text[split3+1:])
+				self.next_next_id = int(message_text[split3+1:])
+
+			elif message_text[:split1] == "2": 
+				print("My first successor is now peer %d" % self.next_id)
+
+				print("My second successor is now peer %s" % message_text[split2+1:split3])
+				self.next_next_id = int(message_text[split2+1:split3])
+
+			else:
+				print("ERROR: INCORRECT PROTOCOL")
+				continue 
+
+
 			conn.send(message)
 			conn.close()
  
@@ -157,8 +181,6 @@ def main():
 			if peer.predecessor == -1 or peer.prepredecessor == -1:
 				print("ERROR: PEER CANNOT SAFETLY EXIT, TRY AGAIN LATER") 
 				continue 
-
-
 
 			###### Depart from first predecessor #####
 			sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
