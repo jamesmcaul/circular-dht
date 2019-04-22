@@ -140,11 +140,11 @@ class Peer():
 
 
 	def tcpServerInit(self):
-		while True: 
-			server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-			server_socket.bind((self.host, 50000 + self.id))
-			server_socket.listen(1)
+		server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+		server_socket.bind((self.host, 50000 + self.id))
+		server_socket.listen(5)
 
+		while True: 
 			conn, address = server_socket.accept()
 
 			message = conn.recv(1024)
@@ -159,8 +159,8 @@ class Peer():
 				file_hash = file % 256
 
 				if file_hash == self.id or (file_hash < self.id and file_hash > self.predecessor) or (file_hash < self.id and self.id < self.predecessor) or (file_hash > self.id and file_hash > self.predecessor and self.id < self.predecessor):
-					print("File %d is here." % file)
-					response_text = "RES" + str(file) + "|" + str(self.id)
+					print("File %s is here." % message_text[3:7])
+					response_text = "RES" + message_text[3:7] + "|" + str(self.id)
 					response = response_text.encode()
 
 					respond_to_peer = int(message_text[8:])
@@ -173,7 +173,7 @@ class Peer():
 
 
 				else:
-					print("File %d is not stored here." % file)
+					print("File %s is not stored here." % message_text[3:7])
 					sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 					sock.connect((self.host, 50000 + self.next_id))
 					sock.send(message)
@@ -207,6 +207,7 @@ class Peer():
 
 				else:
 					print("ERROR: INCORRECT PROTOCOL")
+					conn.close()
 					continue 
 
 
@@ -293,7 +294,7 @@ def main():
 			file = text[8:]
 
 			sock3 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-			departure_message_text = "REQ" + file + "|" + peer.id
+			departure_message_text = "REQ" + file + "|" + str(peer.id)
 			departure_message = departure_message_text.encode()
 			sock3.connect((peer.host, 50000 + peer.next_id))
 			sock3.send(departure_message)
