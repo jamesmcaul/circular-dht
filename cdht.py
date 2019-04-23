@@ -18,6 +18,7 @@ class Peer():
 		self.drop_prob = drop_prob
 		self.predecessor = -1
 		self.prepredecessor = -1
+		self.start_time = time.time()
 
 
 	def pingServerInit(self):
@@ -59,7 +60,7 @@ class Peer():
 
 		while True:
 
-			if first_drop_count > 5:
+			if first_drop_count > 4:
 				print("Peer %d no longer alive." % self.next_id)
 
 				sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -81,7 +82,7 @@ class Peer():
 				first_drop_count = 0
 
 
-			if second_drop_count > 6: 
+			if second_drop_count > 5: 
 				print("Peer %d no longer alive." % self.next_next_id)
 
 				sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -246,10 +247,13 @@ class Peer():
 		file_data = f.read(self.mss)
 
 		resp_log = open("responding_log.txt", "a+b")
+		seq_num = 0 
+		ack_num = 0
+		is_resend = False
 
 		while(file_data):
 
-			message = "SEQ0ACK0F"
+			message = "SEQ" + str(seq_num) + "ACK" + str(ack_num) + "X" + str(sys.getsizeof(file_data)) + "F"
 			packet = message.encode('latin-1')
 			packet = packet + file_data
 
@@ -257,11 +261,24 @@ class Peer():
 
 			try: 
 				data, server = transfer_socket.recvfrom(1024)
-				response  = data.decode()
-				print(response)
+
+				if not is_resend: 
+					log_message = "snd " + str(time.time() - self.start_time) + " " + str(seq_num) + " " + str(sys.getsizeof(file_data)) + " " + str(ack_num) + "\r\n"
+					log  = log_message.encode("latin-1")
+					resp_log.write(log)
+
+				if is_resend:
+					log_message = "RTX " + str(time.time() - self.start_time) + " " + str(seq_num) + " " + str(sys.getsizeof(file_data)) + " " + str(ack_num) + "\r\n"
+					log  = log_message.encode("latin-1")
+					resp_log.write(log)
+
+				seq_num += 1
+				ack_num += 1
+				is_resend = False 
+
 
 			except socket.timeout:
-				print("Resend packet")
+				is_resend = True
 				continue
 
 			file_data = f.read(self.mss)
@@ -291,12 +308,24 @@ class Peer():
 				break
 
 			random_number = random.random()
+
+			index_seq = message_text.find("Q")
+			index_ack = message_text.find("A")
+			index_x = message_text.find("X")
+			index_f = message_text.find("F")
+
 			if random_number < self.drop_prob:
+				log_message = "drop " + str(time.time() - self.start_time) + " " + message_text[index_seq+1:index_ack] + " " + message_text[index_x+1:index_f] + " " + message_text[index_ack+3:index_x] + "\r\n"
+				log  = log_message.encode("latin-1")
+				req_log.write(log)
 				continue
 
-			index = message_text.find("F")
-			file_data = (message_text[index+1:]).encode('latin-1')
+			file_data = (message_text[index_f+1:]).encode('latin-1')
 			f.write(file_data)
+
+			log_message = "rcv " + str(time.time() - self.start_time) + " " + message_text[index_seq+1:index_ack] + " " + message_text[index_x+1:index_f] + " " + message_text[index_ack+3:index_x] + "\r\n"
+			log  = log_message.encode("latin-1")
+			req_log.write(log)
 
 			ack_text = "ACK"
 			ack = ack_text.encode()
