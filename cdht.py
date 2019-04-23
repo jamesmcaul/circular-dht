@@ -5,6 +5,7 @@ import sys
 import socket
 import threading
 import time
+import random
 
 class Peer():
 
@@ -28,21 +29,28 @@ class Peer():
 			message, address = server_socket.recvfrom(1024)
 			message_text = message.decode()
 
-			print("A ping request message was received from Peer %s." % message_text[5:])
+			# Ping Response
+			if message_text[:4] == "PING":
 
-			if message_text[4] == '1':
-				self.predecessor = int(message_text[5:])
+				print("A ping request message was received from Peer %s." % message_text[5:])
 
-			elif message_text[4] == '2':
-				self.prepredecessor = int(message_text[5:])
+				if message_text[4] == '1':
+					self.predecessor = int(message_text[5:])
 
-			else: 
-				print("PROTOCOL ERROR") 
+				elif message_text[4] == '2':
+					self.prepredecessor = int(message_text[5:])
+
+				else: 
+					print("PROTOCOL ERROR") 
 
 
-			response_string = "PING" + str(self.id)
-			response = response_string.encode()
-			server_socket.sendto(response, address)
+				response_string = "PING" + str(self.id)
+				response = response_string.encode()
+				server_socket.sendto(response, address)
+
+			else:
+				print("ERROR: COULD NOT IDENTIFY PACKET RECEVIED OVER UDP PORT %d" % 50000 + self.id)
+
 
 
 	def pingSuccessors(self):
@@ -171,6 +179,12 @@ class Peer():
 					sock.close()
 					print("A response message, destined for peer %d, has been sent." % respond_to_peer)
 
+					self.fileTransfer(respond_to_peer, message_text[3:7])
+
+					print("The file is sent.")
+
+
+
 
 				else:
 					print("File %s is not stored here." % message_text[3:7])
@@ -183,6 +197,10 @@ class Peer():
 
 			elif message_text[:3] == "RES":
 				print("Received a response message from peer %s, which has the file %s." % (message_text[8:], message_text[3:7]))
+
+				self.fileReceive()
+
+				print("The file is received.")
 
 
 			else: 
@@ -213,7 +231,84 @@ class Peer():
 
 			conn.send(message)
 			conn.close()
- 
+
+
+	def fileTransfer(self, rec_id, file):
+		print("We now start sending the file ......")
+
+		transfer_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+		transfer_socket.settimeout(1.0)
+		addr = (self.host, 60000 + rec_id)
+
+		file_name = str(file) + ".pdf"
+
+		f = open(file_name, "rb")
+		file_data = f.read(self.mss)
+
+		resp_log = open("responding_log.txt", "a+b")
+
+		while(file_data):
+
+			message = "SEQ0ACK0F"
+			packet = message.encode('latin-1')
+			packet = packet + file_data
+
+			transfer_socket.sendto(packet, addr)
+
+			try: 
+				data, server = transfer_socket.recvfrom(1024)
+				response  = data.decode()
+				print(response)
+
+			except socket.timeout:
+				print("Resend packet")
+				continue
+
+			file_data = f.read(self.mss)
+
+		end_message = "DONE"
+		packet = end_message.encode()
+		transfer_socket.sendto(packet, addr)
+
+		f.close()
+		resp_log.close()
+
+	def fileReceive(self):
+		print("We now start receiving the file .......")
+
+		server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+		server_socket.bind((self.host, 60000 + self.id))
+
+		f = open("received_file.pdf", "wb")
+
+		req_log = open("requesting_log.txt", "a+b")
+
+		while True:
+			message, address = server_socket.recvfrom(1024)
+			message_text = message.decode('latin-1')
+
+			if message_text[0:4] == "DONE":
+				break
+
+			random_number = random.random()
+			if random_number < self.drop_prob:
+				continue
+
+			index = message_text.find("F")
+			file_data = (message_text[index+1:]).encode('latin-1')
+			f.write(file_data)
+
+			ack_text = "ACK"
+			ack = ack_text.encode()
+			server_socket.sendto(ack, address)
+
+		f.close()
+		req_log.close()
+
+
+
+
+
 
 
 
@@ -258,10 +353,9 @@ def main():
 
 
 	while True: 
-		text = input("-->")
+		text = input()
 		
 		if text == "quit":
-			print("Perform peer departure")
 
 			if peer.predecessor == -1 or peer.prepredecessor == -1:
 				print("ERROR: PEER CANNOT SAFETLY EXIT, TRY AGAIN LATER") 
@@ -289,7 +383,6 @@ def main():
 
 
 		elif text[:7] == "request":
-			print("Perform file transfer")
 
 			file = text[8:]
 
