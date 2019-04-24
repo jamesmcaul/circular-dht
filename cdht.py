@@ -53,7 +53,6 @@ class Peer():
 				print("ERROR: COULD NOT IDENTIFY PACKET RECEVIED OVER UDP PORT %d" % 50000 + self.id)
 
 
-
 	def pingSuccessors(self):
 		first_drop_count = 0
 		second_drop_count = 0 
@@ -184,9 +183,6 @@ class Peer():
 
 					print("The file is sent.")
 
-
-
-
 				else:
 					print("File %s is not stored here." % message_text[3:7])
 					sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -289,6 +285,7 @@ class Peer():
 
 		f.close()
 		resp_log.close()
+
 
 	def fileReceive(self):
 		print("We now start receiving the file .......")
