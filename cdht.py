@@ -1,4 +1,4 @@
-# James McAuliffe, z5248493
+# James McAuliffe
 # Python version 3.*
 
 import sys
